@@ -107,6 +107,23 @@ const sortNotes = (notes: Note[]) =>
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
 
+const dedupeNotesById = (notes: Note[]) => {
+  const byId = new Map<string, Note>();
+  notes.forEach((note) => {
+    const existing = byId.get(note.id);
+    if (!existing) {
+      byId.set(note.id, note);
+      return;
+    }
+
+    if (new Date(note.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
+      byId.set(note.id, note);
+    }
+  });
+
+  return [...byId.values()];
+};
+
 const readInitialState = (): { notes: Note[]; selectedNoteId: string | null; deletedNotes: DeletedNote[] } => {
   const savedNotes = localStorage.getItem(STORAGE_KEY);
 
@@ -114,13 +131,13 @@ const readInitialState = (): { notes: Note[]; selectedNoteId: string | null; del
     try {
       const parsed = JSON.parse(savedNotes) as PersistedState | Note[];
 
-      if (Array.isArray(parsed)) {
-        const normalized = parsed.map(normalizeNote).filter((note): note is Note => note !== null);
-        if (normalized.length > 0) {
-          const ordered = sortNotes(normalized);
-          return {
-            notes: ordered,
-            selectedNoteId: ordered[0].id,
+        if (Array.isArray(parsed)) {
+          const normalized = parsed.map(normalizeNote).filter((note): note is Note => note !== null);
+          if (normalized.length > 0) {
+            const ordered = sortNotes(dedupeNotesById(normalized));
+            return {
+              notes: ordered,
+              selectedNoteId: ordered[0].id,
             deletedNotes: [],
           };
         }
@@ -134,7 +151,7 @@ const readInitialState = (): { notes: Note[]; selectedNoteId: string | null; del
               .filter((note): note is DeletedNote => note !== null)
           : [];
 
-        const ordered = sortNotes(notes);
+        const ordered = sortNotes(dedupeNotesById(notes));
 
         if (ordered.length > 0 || deletedNotes.length > 0) {
           return {
@@ -228,25 +245,36 @@ export default function Home() {
 
     const intervalId = window.setInterval(() => {
       const now = Date.now();
+      let restoredNotes: Note[] = [];
+
       setDeletedNotes((previousDeleted) => {
         const toRestore = previousDeleted.filter(
           (note) => now - new Date(note.deletedAt).getTime() >= AUTO_RESTORE_MS,
         );
 
         if (toRestore.length > 0) {
-          const restoredNotes = toRestore.map((deletedNote) => {
-            const { deletedAt, ...note } = deletedNote;
-            void deletedAt;
-            return { ...note, updatedAt: new Date().toISOString() };
-          });
-
-          setNotes((previousNotes) => sortNotes([...restoredNotes, ...previousNotes]));
+          restoredNotes = toRestore.map((deletedNote) => ({
+            id: deletedNote.id,
+            title: deletedNote.title,
+            content: deletedNote.content,
+            tags: deletedNote.tags,
+            pinned: deletedNote.pinned,
+            updatedAt: new Date().toISOString(),
+          }));
         }
 
         return previousDeleted.filter(
           (note) => now - new Date(note.deletedAt).getTime() < AUTO_RESTORE_MS,
         );
       });
+
+      if (restoredNotes.length > 0) {
+        setNotes((previousNotes) => {
+          const existing = new Set(previousNotes.map((note) => note.id));
+          const deduped = restoredNotes.filter((note) => !existing.has(note.id));
+          return deduped.length > 0 ? sortNotes([...deduped, ...previousNotes]) : previousNotes;
+        });
+      }
     }, 60_000);
 
     return () => window.clearInterval(intervalId);
@@ -370,24 +398,30 @@ export default function Home() {
   };
 
   const restoreDeletedNote = (noteId: string) => {
-    setDeletedNotes((previousDeleted) => {
-      const noteToRestore = previousDeleted.find((note) => note.id === noteId);
-      if (!noteToRestore) {
-        return previousDeleted;
+    const noteToRestore = deletedNotes.find((note) => note.id === noteId);
+    if (!noteToRestore) {
+      return;
+    }
+
+    setDeletedNotes((previousDeleted) => previousDeleted.filter((note) => note.id !== noteId));
+
+    const noteWithFreshDate: Note = {
+      id: noteToRestore.id,
+      title: noteToRestore.title,
+      content: noteToRestore.content,
+      tags: noteToRestore.tags,
+      pinned: noteToRestore.pinned,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setNotes((previousNotes) => {
+      if (previousNotes.some((note) => note.id === noteWithFreshDate.id)) {
+        return previousNotes;
       }
 
-      const { deletedAt, ...restoredNote } = noteToRestore;
-      void deletedAt;
-      const noteWithFreshDate: Note = {
-        ...restoredNote,
-        updatedAt: new Date().toISOString(),
-      };
-
-      setNotes((previousNotes) => sortNotes([noteWithFreshDate, ...previousNotes]));
-      setSelectedNoteId(noteWithFreshDate.id);
-
-      return previousDeleted.filter((note) => note.id !== noteId);
+      return sortNotes([noteWithFreshDate, ...previousNotes]);
     });
+    setSelectedNoteId(noteWithFreshDate.id);
   };
 
   const togglePin = (noteId: string) => {
