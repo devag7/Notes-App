@@ -1,6 +1,6 @@
 # Notes-App
 
-Markdown notes app built with Next.js 14 App Router, Tailwind CSS, and react-markdown.
+Markdown notes app built with Next.js App Router, Tailwind CSS, and react-markdown.
 
 ## Run locally
 
