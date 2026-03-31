@@ -248,7 +248,7 @@ export default function Home() {
             onClick={createNote}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
           >
-            New (Ctrl+N)
+            New (Ctrl/Cmd+N)
           </button>
         </div>
         <input
