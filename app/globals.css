@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-root {
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    background: white !important;
+  }
+
+  .print-preview {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+}
